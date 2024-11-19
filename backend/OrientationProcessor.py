@@ -4,7 +4,7 @@ import numpy as np
 
 class OrientationProcessor:
     __slots__ = [
-        "dataset",  # 存储加载的数据集
+        "datacube",  # 存储加载的数据集
         "_orientation_plan",  # 取向计划对象
         "_orientation_map",  # 计算生成的取向映射
         "_strain_map",  # 应变映射对象
@@ -30,7 +30,7 @@ class OrientationProcessor:
         "_disk_detect_params",  # Bragg盘检测的参数
     ]
     def __init__(self):
-        self.dataset = None
+        self.datacube = None
         self.orientation_plan = None
         self.orientation_map = None
         self.strain_map = None
@@ -38,7 +38,7 @@ class OrientationProcessor:
 
     def load_dataset(self, file_path):
         """Load the dataset from a file."""
-        self.dataset = py4DSTEM.import_file(file_path)
+        self.datacube = py4DSTEM.import_file(file_path)
 
     def create_orientation_plan(self, params):
         """
@@ -47,7 +47,7 @@ class OrientationProcessor:
         Args:
             params (dict): Parameters for orientation plan generation.
         """
-        self.orientation_plan = self.dataset.create_orientation_plan(**params)
+        self.orientation_plan = self.datacube.create_orientation_plan(**params)
 
     def execute_orientation_plan(self):
         """
@@ -133,9 +133,9 @@ class OrientationProcessor:
             geometry (tuple): Geometry definition for virtual image.
             name (str): Name of the virtual image.
         """
-        if self.dataset is None:
-            raise ValueError("Dataset has not been loaded.")
-        return self.dataset.get_virtual_image(mode=mode, geometry=geometry, name=name)
+        if self.datacube is None:
+            raise ValueError("Datacube has not been loaded.")
+        return self.datacube.get_virtual_image(mode=mode, geometry=geometry, name=name)
 
     def detect_bragg_disks(self, template, detect_params):
         """
@@ -145,9 +145,9 @@ class OrientationProcessor:
             template: Template for disk detection.
             detect_params (dict): Parameters for disk detection.
         """
-        if self.dataset is None:
+        if self.datacube is None:
             raise ValueError("Dataset has not been loaded.")
-        self.bragg_disks = self.dataset.find_Bragg_disks(template=template, **detect_params)
+        self.bragg_disks = self.datacube.find_Bragg_disks(template=template, **detect_params)
 
     def visualize_bragg_disks(self, rxs, rys, colors, scale=300):
         """
@@ -160,7 +160,7 @@ class OrientationProcessor:
             scale (int): Scale for visualization.
         """
         fig = py4DSTEM.visualize.show_image_grid(
-            get_ar=lambda i: self.dataset.data[rxs[i], rys[i], :, :],
+            get_ar=lambda i: self.datacube.data[rxs[i], rys[i], :, :],
             H=2,
             W=3,
             get_bordercolor=lambda i: colors[i],

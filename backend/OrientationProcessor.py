@@ -17,6 +17,8 @@ class OrientationProcessor:
         "_rxs", 
         "_rys", 
         "_colors", 
+        "_guess_center",
+        "_radial_range",
         "_orientation_params",  # 用于创建取向计划的参数
         "_strain_params",  # 用于计算应变的参数
         "_grain_boundary_params",  # 用于提取晶界的参数
@@ -34,19 +36,72 @@ class OrientationProcessor:
         "_probe_semiangle",
         "_probe_qx0",
         "_probe_qy0",
-        "_kernel",  # 探针核
+        "_kernel", 
         "_probe_params",  # 探针的初始化参数
-        "_disk_detect_params",  # Bragg盘检测的参数
+        "_disk_detect_params",  
     ]
-    def set_probe_xlims_ylims(self, xlims: tuple, ylims: tuple):
-        self._probe_xlims = xlims
-        self._probe_ylims = ylims
-        self._probe_ROI = np.zeros(self.datacube.rshape, dtype=bool)
-        self._probe_ROI[
-            self._probe_xlims[0] : self._probe_xlims[1],
-            self._probe_ylims[0] : self._probe_ylims[1],
-        ] = True
    
+    def (self, mode: str = "raw", figsize: tuple = (4, 4), alpha: float = 0.3, fill: bool = True):
+        bragg_vector_map = self._bragg_peaks.get_bvm(mode=mode)
+    
+        py4DSTEM.show(
+            bragg_vector_map,
+            annulus={
+                'center': self._guess_center,  
+                'radii': self._radial_range,  
+                'alpha': alpha,
+                'fill': fill,
+            },
+            figsize=figsize,
+        )
+    
+    def set_guess_center(self, center: tuple):
+        self._guess_center = center
+        self._update_geometry_adf()
+        
+    def set_radial_range(self, radial: tuple):
+        self._radial_range = radial
+        self._update_geometry_adf()
+
+    def _update_geometry_adf(self):
+        self._geometry_adf = (self._guess_center,  self._radial_range)
+
+         
+    def save_bragg_disks(self, filepath: str): #新加的，好像是必要的
+        py4DSTEM.save(
+            filepath,
+            self._bragg_peaks,  
+            mode="o",
+        )
+    
+    def calc_all_bragg_disks(self):
+        self._bragg_peaks = self.datacube.find_Bragg_disks(
+            template=self._probe.kernel,
+            **self._disk_detect_params,
+        )
+         
+    def get_origin_grid_image(self):
+        fig = py4DSTEM.visualize.show_image_grid(
+            get_ar=lambda i: self.datacube.data[self._rxs[i], self._rys[i], :, :],
+            H=2,
+            W=3,
+            scaling="log",
+            vmin=0.02,   #确认
+            vmax=1,
+            get_bordercolor=lambda i: self._colors[i],
+            returnfig=True,
+        )
+        return fig[0]
+        
+    def get_selected_bragg_disks_image(self):
+        disks_selected = self.datacube.find_Bragg_disks(
+            data=(self._rxs, self._rys),
+            template=self._probe.kernel,
+            **self._disk_detect_params,
+        )    
+    def set_disk_detect_params(self, params: dict):
+        self._disk_detect_params = params
+        
     def get_kernel_image(self):
         fig = py4DSTEM.visualize.show_kernel(
             self._probe.kernel,
@@ -159,166 +214,7 @@ class OrientationProcessor:
         self._probe_semiangle = 4 #改动
         self._probe_qx0 = None
         self._probe_qy0 = None
-        
-    def create_orientation_plan(self, params):
-        """
-        Create an orientation plan for crystal alignment.
-
-        Args:
-            params (dict): Parameters for orientation plan generation.
-        """
-        self.orientation_plan = self.datacube.create_orientation_plan(**params)
-
-    def execute_orientation_plan(self):
-        """
-        Execute the orientation plan to compute orientations.
-        """
-        if self.orientation_plan is None:
-            raise ValueError("Orientation plan has not been created.")
-        self.orientation_map = self.orientation_plan.execute()
-
-    def visualize_orientation_map(self, orientation_ind=0, show_axes=False):
-        """
-        Visualize the computed orientation map.
-
-        Args:
-            orientation_ind (int): Index of the orientation to visualize.
-            show_axes (bool): Whether to show axes in the visualization.
-        """
-        if self.orientation_map is None:
-            raise ValueError("Orientation map has not been computed.")
-        fig = py4DSTEM.visualize.plot_orientation_map(
-            self.orientation_map, orientation_ind=orientation_ind, show_axes=show_axes, returnfig=True
-        )
-        return fig
-
-    def compute_strain_map(self, strain_params):
-        """
-        Compute the strain map based on orientation data.
-
-        Args:
-            strain_params (dict): Parameters for strain calculation.
-        """
-        if self.orientation_map is None:
-            raise ValueError("Orientation map has not been computed.")
-        self.strain_map = py4DSTEM.StrainMap(braggvectors=self.orientation_map, **strain_params)
-
-    def visualize_strain_map(self):
-        """
-        Visualize the computed strain map.
-        """
-        if self.strain_map is None:
-            raise ValueError("Strain map has not been computed.")
-        fig = py4DSTEM.visualize.plot_strain_map(self.strain_map, returnfig=True)
-        return fig
-
-    def extract_grain_boundary_data(self, params):
-        """
-        Extract grain boundary data based on the orientation map.
-
-        Args:
-            params (dict): Parameters for grain boundary extraction.
-        """
-        if self.orientation_map is None:
-            raise ValueError("Orientation map has not been computed.")
-        self.grain_boundaries = self.dataset.extract_grain_boundaries(self.orientation_map, **params)
-        return self.grain_boundaries
-
-    def visualize_grain_boundaries(self):
-        """
-        Visualize the extracted grain boundaries.
-        """
-        if self.grain_boundaries is None:
-            raise ValueError("Grain boundaries have not been extracted.")
-        fig = py4DSTEM.visualize.plot_grain_boundaries(self.grain_boundaries, returnfig=True)
-        return fig
-
-    def save_results(self, save_path):
-        """
-        Save the computed results to a file.
-
-        Args:
-            save_path (str): Path to save the results.
-        """
-        if self.orientation_map is None:
-            raise ValueError("No orientation map to save.")
-        py4DSTEM.save(save_path, self.orientation_map, mode="o")
-
-    def create_virtual_image(self, mode, geometry, name):
-        """
-        Create a virtual image (bright or dark field).
-
-        Args:
-            mode (str): "circle" for BF, "annulus" for ADF.
-            geometry (tuple): Geometry definition for virtual image.
-            name (str): Name of the virtual image.
-        """
-        if self.datacube is None:
-            raise ValueError("Datacube has not been loaded.")
-        return self.datacube.get_virtual_image(mode=mode, geometry=geometry, name=name)
-
-    def detect_bragg_disks(self, template, detect_params):
-        """
-        Detect Bragg disks in the diffraction data.
-
-        Args:
-            template: Template for disk detection.
-            detect_params (dict): Parameters for disk detection.
-        """
-        if self.datacube is None:
-            raise ValueError("Dataset has not been loaded.")
-        self.bragg_disks = self.datacube.find_Bragg_disks(template=template, **detect_params)
-
-    def visualize_bragg_disks(self, rxs, rys, colors, scale=300):
-        """
-        Visualize detected Bragg disks on selected diffraction patterns.
-
-        Args:
-            rxs (list): List of x-indices for visualization.
-            rys (list): List of y-indices for visualization.
-            colors (list): Colors for marking the disks.
-            scale (int): Scale for visualization.
-        """
-        fig = py4DSTEM.visualize.show_image_grid(
-            get_ar=lambda i: self.datacube.data[rxs[i], rys[i], :, :],
-            H=2,
-            W=3,
-            get_bordercolor=lambda i: colors[i],
-            get_x=lambda i: self.bragg_disks[i].data["qx"],
-            get_y=lambda i: self.bragg_disks[i].data["qy"],
-            get_pointcolors=lambda i: colors[i],
-            open_circles=True,
-            scale=scale,
-            returnfig=True,
-        )
-        return fig
-
-    def fit_ellipse_amorphous_ring(self, amorphous_diffraction, fit_radii):
-        """
-        Fit an ellipse to an amorphous diffraction ring.
-
-        Args:
-            amorphous_diffraction: Amorphous diffraction pattern.
-            fit_radii (tuple): Radii range for ellipse fitting.
-        """
-        center = amorphous_diffraction.calibration.get_origin_mean()
-        self.p_ellipse, self.p_dsg = py4DSTEM.process.calibration.fit_ellipse_amorphous_ring(
-            data=amorphous_diffraction.data, center=center, fitradii=fit_radii
-        )
-
-    def visualize_ellipse_fit(self, amorphous_diffraction, fit_radii):
-        """
-        Visualize the ellipse fit on the amorphous diffraction ring.
-
-        Args:
-            amorphous_diffraction: Amorphous diffraction pattern.
-            fit_radii (tuple): Radii range for ellipse fitting.
-        """
-        fig = py4DSTEM.visualize.show_amorphous_ring_fit(
-            amorphous_diffraction.data,
-            fitradii=fit_radii,
-            p_dsg=self.p_dsg,
-            returnfig=True,
-        )
-        return fig
+        self._disk_detect_params = None
+        self._guess_center = None
+        self._radial_range = None
 

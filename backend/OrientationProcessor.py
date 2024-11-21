@@ -40,6 +40,50 @@ class OrientationProcessor:
         "_probe_params",  # 探针的初始化参数
         "_disk_detect_params",  
     ]
+    def measure_and_plot_beamstop_origin( #涉及光束挡板，是否要保留
+    self,
+    max_dist: int = 3,
+    max_iter: int = 3,
+    figsize: tuple = (8, 8),
+    cmap: str = 'RdBu'
+):
+    """
+    测量光束挡板 (beamstop) 的原点，并可视化结果。
+    """
+    
+    center_guess = self._center_guess 
+    radii = self._radial_range         
+    qx0_meas, qy0_meas, mask_originmeas = self._bragg_peaks.measure_origin_beamstop(
+        center_guess=center_guess,
+        radii=radii,
+        max_dist=max_dist,
+        max_iter=max_iter
+    )
+    import matplotlib.pyplot as plt
+    import numpy as np
+    fig, axs = plt.subplots(1, 2, figsize=figsize)
+    
+    py4DSTEM.show(
+        qx0_meas,
+        intensity_range="centered",
+        vmin=np.mean(qx0_meas[mask_originmeas]),
+        cmap=cmap,
+        figax=(fig, axs[0]),
+        mask=mask_originmeas
+    )
+    axs[0].set_title("Measured qx0")
+    
+    py4DSTEM.show(
+        qy0_meas,
+        intensity_range="centered",
+        vmin=np.mean(qy0_meas[mask_originmeas]),
+        cmap=cmap,
+        figax=(fig, axs[1]),
+        mask=mask_originmeas
+    )
+    axs[1].set_title("Measured qy0")
+    
+    plt.show()
    
     def (self, mode: str = "raw", figsize: tuple = (4, 4), alpha: float = 0.3, fill: bool = True):
         bragg_vector_map = self._bragg_peaks.get_bvm(mode=mode)
